@@ -3,8 +3,8 @@ import os
 import re
 from datetime import datetime
 from typing import overload, Optional
-from utils import FileUtils
 from bilibili_api import Credential
+from utils import FileUtils
 
 
 @overload

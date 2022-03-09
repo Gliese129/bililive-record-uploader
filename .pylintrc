@@ -1,0 +1,16 @@
+[MASTER]
+
+disable=
+    missing-function-docstring,
+    missing-module-docstring,
+    missing-class-docstring,
+    invalid-name,
+    too-few-public-methods,
+    too-many-public-methods,
+    too-many-instance-attributes,
+    eval-used,
+    import-error,
+    undefined-variable,
+    wildcard-import,
+
+max-line-length=150

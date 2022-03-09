@@ -72,7 +72,7 @@ def init(*_):
     cpu_count = multiprocessing.cpu_count()
     app.ctx.process_pool = ThreadPoolExecutor(max_workers=min(cpu_count, global_config.workers))
     app.ctx.global_config = global_config
-    consts.Paths(global_config)
+    consts.Paths.init(global_config)
     app.ctx.upload_queue = queue.Queue()
 
 
@@ -80,12 +80,16 @@ if __name__ == '__main__':
     work_dir = ''
     try:
         options, args = getopt.getopt(sys.argv[1:], 'w:', ['work-dir='])
-    except Exception as e:
+        for option, value in options:
+            if option in ("-w", "--work-dir"):
+                work_dir = value
+                break
+        if work_dir == '':
+            raise getopt.GetoptError('work-dir is required')
+    except getopt.GetoptError as e:
         logging.error(e)
         sys.exit(2)
-    for option, value in options:
-        if option in ("-w", "--work-dir"):
-            work_dir = value
     global_config = GlobalConfig(work_dir)
     importlib.import_module('tasks')  # import it to register singles
-    app.run(host='0.0.0.0', port=global_config.port, debug=False, access_log=False, auto_reload=True)
+    app.run(host='0.0.0.0', port=global_config.port,
+            debug=False, access_log=False, auto_reload=True)

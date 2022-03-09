@@ -1,7 +1,7 @@
 import json
 import os
-import yaml
 from shutil import copy, rmtree
+import yaml
 
 
 def YmlReader(path: str) -> dict:
@@ -32,12 +32,11 @@ def ReadJson(path: str) -> dict:
     return result
 
 
-def WriteDict(path: str, obj: dict) -> None:
+def WriteDict(path: str, obj: dict):
     """  Write dict to json file
 
     :param path: file path
     :param obj: object need to write
-    :return: None
     """
     if not os.path.exists(path):
         folder_path = os.path.dirname(path)
@@ -80,22 +79,20 @@ def CopyFile(file: str, target: str) -> str:
     return new_file
 
 
-def DeleteFolder(folder: str) -> None:
+def DeleteFolder(folder: str):
     """ Delete a folder and files in it
 
     :param folder: folder path
-    :return: None
     """
     if os.path.exists(folder):
         rmtree(folder)
 
 
-def DeleteFiles(file_stems: list[str], types: list[str]) -> None:
+def DeleteFiles(file_stems: list[str], types: list[str]):
     """ Delete files
 
     :param file_stems: files need to delete(no extension)
     :param types: file extensions
-    :return: None
     """
     for file_stem in file_stems:
         for file_type in types:

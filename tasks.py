@@ -3,7 +3,9 @@ import logging
 import os
 import requests
 from bilibili_api import Credential
+from bilibili_api.exceptions.ResponseCodeException import ResponseCodeException
 from sanic import Sanic
+from exceptions import *
 from utils.Uploader import Uploader
 from utils.Processor import Processor
 from utils.FileUtils import DeleteFolder, DeleteFiles
@@ -32,7 +34,7 @@ def file_open(room_id: int, file_path: str):
     :param file_path: 录播文件路径
     :return:
     """
-    logging.debug(f'[%d] file path: %s', room_id, file_path)
+    logging.debug('[%d] file path: %s', room_id, file_path)
     Processor.file_open(room_id=room_id, file_path=file_path)
 
 
@@ -49,7 +51,7 @@ async def session_end(room_id: int, event_data: dict, room_config: RoomConfig):
     process = Processor(event_data=event_data, room_config=room_config)
     process.live_end()
     if process.check_if_need_process():
-        logging.info(f'[{room_id}] processing...')
+        logging.info('[%d] processing...', room_id)
         try:
             result_videos = await process.process(multipart=global_config.multipart)
         except FileExistsError as e:
@@ -90,21 +92,28 @@ async def video_upload(room_id: int, room_config: RoomConfig, credential: Creden
     """
     global_config = app.ctx.global_config
     uploader = Uploader(credential=credential, room_config=room_config, **info)
-    result = await uploader.upload()
-    if result:
+    live_info: LiveInfo = info['live_info']
+    dir_path = os.path.join(global_config.work_dir, live_info.session_id)
+    try:
+        await uploader.upload()
         # successfully upload or no files -> delete files
-        live_info: LiveInfo = info['live_info']
-        dir_path = os.path.join(global_config.process_dir, live_info.session_id)
         logging.info('[%d] uploading succeeded, deleting proceed videos in folder %s...', room_id, dir_path)
         DeleteFolder(dir_path)
-        if global_config.delete_flag:
+        if global_config.delete:
             logging.info('[%d] deleting origin videos...', room_id)
             DeleteFiles(file_stems=info.get('origin_stems'), types=['flv', 'xml'])
-    else:
-        # failed upload -> add to upload queue again
+    except (InvalidParamException, ResponseCodeException) as e:
+        # failed to upload -> add to upload queue again
         logging.warning('[%d] uploading failed, adding to upload queue again...', room_id)
+        logging.warning(e)
         upload_queue = app.ctx.upload_queue
         upload_queue.put(info)
+    except FileNotFoundError:
+        # no files
+        logging.warning('[%d] no files to upload, deleting origin videos...', room_id)
+        logging.error('please check the reason why no videos are proceeded, '
+                      'also please remember that origin videos won\'t be deleted so you need to delete them manually')
+        DeleteFolder(dir_path)
 
 
 async def send_webhook(url: str, event_data: dict, videos: list[str], work_dir: str):
@@ -124,7 +133,6 @@ async def send_webhook(url: str, event_data: dict, videos: list[str], work_dir: 
     for _ in range(3):
         with requests.post(url, json=request_body, headers=headers, timeout=100) as response:
             if response.status_code == 200:
-                logging.info(f'send webhook to {url} successfully')
+                logging.info('send webhook to %s successfully', url)
                 return
-            else:
-                logging.error('%d: %s', response.status_code, response.reason)
+            logging.error('%d: %s', response.status_code, response.reason)

@@ -1,14 +1,12 @@
 import datetime
 import os
 import subprocess
-from sanic import Sanic
-
-import consts
-from utils import FileUtils
-from models import RoomConfig, LiveInfo, GlobalConfig
 import logging
-
-from utils.FileUtils import DeleteFiles
+from sanic import Sanic
+import consts
+from models import RoomConfig, LiveInfo, GlobalConfig
+from utils import FileUtils
+from utils.VideoUtils import get_total_time
 
 app = Sanic.get_app()
 
@@ -37,7 +35,7 @@ class Processor:
         self.process_stems = []
         self.recorder_dir = global_config.record_dir
         self.process_dir = os.path.join(global_config.work_dir, self.live_info.session_id)
-        start_times = FileUtils.ReadJson(consts.Paths().TIME_CACHE)
+        start_times = FileUtils.ReadJson(consts.Paths.TIME_CACHE)
         self.live_info.start_time = datetime.datetime.fromtimestamp(start_times[str(self.live_info.room_id)])
         self.config = room_config
 
@@ -49,10 +47,10 @@ class Processor:
         :param start_time: 直播开始时间
         :return:
         """
-        rooms = FileUtils.ReadJson(consts.Paths().TIME_CACHE)
+        rooms = FileUtils.ReadJson(consts.Paths.TIME_CACHE)
         room_id = str(room_id)
         rooms[room_id] = start_time.timestamp()
-        FileUtils.WriteDict(obj=rooms, path=consts.Paths().TIME_CACHE)
+        FileUtils.WriteDict(obj=rooms, path=consts.Paths.TIME_CACHE)
 
     @staticmethod
     def file_open(room_id: int, file_path: str):
@@ -62,13 +60,13 @@ class Processor:
         :param file_path: 录播文件路径(录播姬提供)
         :return:
         """
-        rooms = FileUtils.ReadJson(consts.Paths().VIDEO_CACHE)
+        rooms = FileUtils.ReadJson(consts.Paths.VIDEO_CACHE)
         room_id = str(room_id)
         file_path = file_path.replace('.flv', '')
         room = rooms.get(room_id, [])
         room.append(file_path)
         rooms[room_id] = room
-        FileUtils.WriteDict(path=consts.Paths().VIDEO_CACHE, obj=rooms)
+        FileUtils.WriteDict(path=consts.Paths.VIDEO_CACHE, obj=rooms)
 
     @staticmethod
     async def run_shell(command: str, prefix: str) -> (str, str):
@@ -78,29 +76,28 @@ class Processor:
         :param prefix: 调用程序
         :return: stdoutdata或者stderrdata
         """
-        logging.debug(f'{prefix} command: {command}')
-        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdoutdata, stderrdata = process.communicate(input=b'N')
-        try:
-            stdoutdata = stdoutdata.decode('utf-8')
-            stderrdata = stderrdata.decode('utf-8')
-        except UnicodeError:
-            stdoutdata = stdoutdata.decode()
-            stderrdata = stderrdata.decode()
-        finally:
-            return stdoutdata, stderrdata
+        logging.debug('%s command: %s', prefix, command)
+        with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+            stdoutdata, stderrdata = process.communicate(input=None)
+            try:
+                stdoutdata = stdoutdata.decode('utf-8')
+                stderrdata = stderrdata.decode('utf-8')
+            except UnicodeError:
+                stdoutdata = stdoutdata.decode()
+                stderrdata = stderrdata.decode()
+        return stdoutdata, stderrdata
 
     def live_end(self):
         """ 直播结束
 
         :return:
         """
-        rooms = FileUtils.ReadJson(consts.Paths().VIDEO_CACHE)
+        rooms = FileUtils.ReadJson(consts.Paths.VIDEO_CACHE)
         room_id = str(self.live_info.room_id)
         self.origin_stems = rooms[room_id]
         # clear video cache
         rooms[room_id] = []
-        FileUtils.WriteDict(path=consts.Paths().VIDEO_CACHE, obj=rooms)
+        FileUtils.WriteDict(path=consts.Paths.VIDEO_CACHE, obj=rooms)
         # relative path ---(if exists)---> absolute path
         self.origin_stems = [os.path.join(self.recorder_dir, video) for video in self.origin_stems if
                              os.path.exists(os.path.join(self.recorder_dir, video + '.flv'))]
@@ -110,7 +107,6 @@ class Processor:
 
         :return: 是否需要处理
         """
-        from utils.VideoUtils import get_total_time
         # check if videos exist
         if len(self.origin_stems) == 0:
             logging.info('[%d] no videos exist', self.live_info.room_id)
@@ -156,12 +152,12 @@ class Processor:
             files = ''
             for video in self.process_stems:
                 files += f"file '{video}.flv'\n"
-            with open(os.path.join(self.process_dir, 'files.txt'), 'w') as f:
+            with open(os.path.join(self.process_dir, 'files.txt'), 'w', encoding='utf-8') as f:
                 f.write(files)
-            command = f'{consts.Paths().FFMPEG} -f concat -safe 0 -i "{os.path.join(self.process_dir, "files.txt")}" ' \
+            command = f'{consts.Paths.FFMPEG} -f concat -safe 0 -i "{os.path.join(self.process_dir, "files.txt")}" ' \
                       f'-c copy "{os.path.join(self.process_dir, "record.flv")}"'
             await self.run_shell(command=command, prefix='ffmpeg')
-            DeleteFiles(file_stems=self.process_stems, types=['flv'])
+            FileUtils.DeleteFiles(file_stems=self.process_stems, types=['flv'])
             self.process_stems = [os.path.join(self.process_dir, 'record')]
         # process videos
         result_videos = await self.composite()
@@ -177,13 +173,13 @@ class Processor:
         if multipart:
             # generate ass by each xml file
             for record in self.process_stems:
-                command += f'{consts.Paths().DANMAKU_FACTORY} -o "{record}.ass" -i "{record}.xml" -d 50 -S 55 --ignore-warnings\n'
+                command += f'{consts.Paths.DANMAKU_FACTORY} -o "{record}.ass" -i "{record}.xml" -d 50 -S 55 --ignore-warnings\n'
         else:
             # combine all xml files to one ass file
-            command = f'{consts.Paths().DANMAKU_FACTORY} -o "{os.path.join(self.process_dir, "record.ass")}" -i '
+            command = f'{consts.Paths.DANMAKU_FACTORY} -o "{os.path.join(self.process_dir, "record.ass")}" -i '
             for record in self.process_stems:
                 command += f'"{record}.xml" '
-            command += f'-d 50 -S 55 --ignore-warnings'
+            command += '-d 50 -S 55 --ignore-warnings'
         # run shell command
         await self.run_shell(command=command, prefix='danmaku factory')
 
@@ -201,10 +197,10 @@ class Processor:
             results.append(output)
             if os.path.exists(f'{record_stem}.ass'):
                 ass_file = record_stem.replace("\\", "/").replace(":", "\\:") + '.ass'
-                command += f'{consts.Paths().FFMPEG} -i "{record_stem}.flv" ' \
+                command += f'{consts.Paths.FFMPEG} -i "{record_stem}.flv" ' \
                            f'-vf "subtitles=\'{ass_file}\'" -ar 22050 "{output}"\n'
             else:
-                command += f'{consts.Paths().FFMPEG} -i "{record_stem}.flv" -c copy "{output}"\n'
+                command += f'{consts.Paths.FFMPEG} -i "{record_stem}.flv" -c copy "{output}"\n'
         # run shell command
         await self.run_shell(command=command, prefix='ffmpeg')
         return results

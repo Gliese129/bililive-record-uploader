@@ -26,13 +26,13 @@ server:
 
 **程序启动后config目录下会出现live2video.json，请勿删除**
 
-**请在B站录播姬webhook v2 中加上[http://${your host}//process]()**
+**请在B站录播姬webhook v2 中加上[http://${your host}/process]()**
 ### 上传视频
 
 处理完的录播将会放入上传队列等待上传，
 此时需要向[http://{your host}:{your port}/upload]()发送get请求
 
-如果设置了自动上传，将会在视频处理完后自动发送请求
+**如果设置了自动上传，将会在视频处理完后自动发送请求**
 
 上传失败的视频会重新放入队列中， 等待下次上传
 
@@ -119,7 +119,6 @@ rooms:
 **channel覆盖逻辑: condition channel > live2video > default channel**
 ****
 
-## Contribute
 ### live2video.json
 直播分区与视频分区的映射
 ~~~json
